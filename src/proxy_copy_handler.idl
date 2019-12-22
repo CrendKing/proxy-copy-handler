@@ -1,0 +1,29 @@
+import "oaidl.idl";
+import "ocidl.idl";
+
+[
+	object,
+	uuid(29175A98-17A7-4B18-8D10-898286753132),
+	dual,
+	nonextensible,
+	pointer_default(unique)
+]
+interface IProxyCopyHook : IDispatch {
+};
+
+[
+	uuid(E266BF5A-6FB6-4B4F-843C-C34ED7EA598D),
+	version(1.0),
+]
+library ProxyCopyHandlerLib
+{
+	importlib("stdole2.tlb");
+	[
+		uuid(4EB17DC6-A98E-42DE-9F3F-93A6819B08A4)
+	]
+	coclass ProxyCopyHook {
+		[default] interface IProxyCopyHook;
+	};
+};
+
+import "shobjidl.idl";
