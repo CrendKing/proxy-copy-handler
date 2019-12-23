@@ -215,7 +215,7 @@
       <GenerateDebugInformation>false</GenerateDebugInformation>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
-      <SubSystem>Console</SubSystem>
+      <SubSystem>Windows</SubSystem>
       <ModuleDefinitionFile>src\proxy_copy_handler.def</ModuleDefinitionFile>
     </Link>
     <Midl>
