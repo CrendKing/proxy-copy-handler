@@ -42,19 +42,29 @@ STDMETHODIMP_(UINT) CProxyCopyHook::CopyCallback(HWND hwnd, UINT wFunc, UINT wFl
     strcpy_s(srcQuoted, MAX_PATH, pszSrcFile);
     PathQuoteSpaces(srcQuoted);
 
-    std::string cmdline = "\"FastCopy.exe\" /auto_close /open_window /no_confirm_del /cmd=";
+    std::string cmdline = "\"FastCopy.exe\" /force_close /no_confirm_del /error_stop /cmd=";
     cmdline.append(cmdlineOperation)
         .append(" ")
         .append(srcQuoted)
         .append(cmdlineDest);
 
-    STARTUPINFO si = { sizeof(si) };
-    PROCESS_INFORMATION pi;
-    if (CreateProcess(nullptr, const_cast<char *>(cmdline.c_str()), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
-        CloseHandle(pi.hThread);
-        CloseHandle(pi.hProcess);
-        return IDNO;
-    } else {
+    HANDLE hMutex = CreateMutex(nullptr, FALSE, "ProxyCopyHandler");
+    if (hMutex == nullptr) {
         return IDYES;
     }
+
+    WaitForSingleObject(hMutex, INFINITE);
+
+    STARTUPINFO si = { sizeof(si) };
+    PROCESS_INFORMATION pi;
+    BOOL created = CreateProcess(nullptr, const_cast<char *>(cmdline.c_str()), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi);
+    if (created) {
+        WaitForSingleObject(pi.hProcess, INFINITE);
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+    }
+
+    ReleaseMutex(hMutex);
+    CloseHandle(hMutex);
+    return created ? IDNO : IDYES;
 }
