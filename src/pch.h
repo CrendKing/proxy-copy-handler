@@ -19,6 +19,11 @@
 #include <atlcom.h>
 #include <atlctl.h>
 
+#include <shellapi.h>
 #include <shlobj.h>
+
+#include <fstream>
+#include <iterator>
+#include <unordered_map>
 
 #include "resource.h"
