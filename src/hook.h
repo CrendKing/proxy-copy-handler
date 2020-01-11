@@ -25,32 +25,28 @@ public:
     DECLARE_PROTECT_FINAL_CONSTRUCT()
 
 private:
-    struct ExecutionKey {
+    struct ExecutionDetail {
         UINT operation;
+        std::string sources;
         char destination[MAX_PATH];
 
-        ExecutionKey(UINT func, PCSTR path);
-        bool operator==(const ExecutionKey &other) const;
+        ExecutionDetail(UINT func, PCSTR dest);
     };
 
-    struct ExecutionKeyHasher {
-        std::size_t operator()(const ExecutionKey &key) const;
-    };
-
-    typedef std::unordered_map<ExecutionKey, std::string, ExecutionKeyHasher> ExecutionMap;
+    typedef std::list<ExecutionDetail> ExecutionList;
 
     struct ExecutionParameter {
         CProxyCopyHook *instance;
-        ExecutionMap::iterator iter;
+        ExecutionList::iterator iter;
     };
-
-    CRITICAL_SECTION _cs;
-    ExecutionMap _pendingExecutions;
-    std::string _copierCmdline;
-    char _quotedPathBuffer[MAX_PATH];
 
     static DWORD WINAPI ExecutionThreadProc(LPVOID hook);
     const char *QuotePath(PCSTR path);
+
+    CRITICAL_SECTION _cs;
+    std::string _copierCmdline;
+    ExecutionList _pendingExecutions;
+    char _quotedPathBuffer[MAX_PATH];
 };
 
 OBJECT_ENTRY_AUTO(__uuidof(ProxyCopyHook), CProxyCopyHook)

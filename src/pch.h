@@ -19,6 +19,7 @@
 #include <shellapi.h>
 #include <shlobj.h>
 
-#include <unordered_map>
+#include <list>
+#include <string>
 
 #include "resource.h"
