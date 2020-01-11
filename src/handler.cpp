@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "hook.h"
 
+
 class ProxyCopyHandlerModule : public ATL::CAtlDllModuleT<ProxyCopyHandlerModule> {
 public:
     DECLARE_LIBID(LIBID_ProxyCopyHandlerLib)

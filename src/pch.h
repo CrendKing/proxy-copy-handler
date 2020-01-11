@@ -1,9 +1,6 @@
 #pragma once
 
-#ifndef STRICT
 #define STRICT
-#endif
-
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
@@ -22,8 +19,6 @@
 #include <shellapi.h>
 #include <shlobj.h>
 
-#include <fstream>
-#include <iterator>
 #include <unordered_map>
 
 #include "resource.h"
