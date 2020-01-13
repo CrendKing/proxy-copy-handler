@@ -21,12 +21,6 @@ CProxyCopyHook::CProxyCopyHook()
         }
         RegCloseKey(registryKey);
     }
-
-    InitializeCriticalSection(&_cs);
-}
-
-CProxyCopyHook::~CProxyCopyHook() {
-    DeleteCriticalSection(&_cs);
 }
 
 STDMETHODIMP_(UINT) CProxyCopyHook::CopyCallback(HWND hwnd, UINT wFunc, UINT wFlags, PCSTR pszSrcFile, DWORD dwSrcAttribs, PCSTR pszDestFile, DWORD dwDestAttribs) {
@@ -46,7 +40,7 @@ STDMETHODIMP_(UINT) CProxyCopyHook::CopyCallback(HWND hwnd, UINT wFunc, UINT wFl
 
     ExecutionDetail detail(wFunc, pszDestFile);
 
-    EnterCriticalSection(&_cs);
+    _mutex.lock();
 
     ExecutionList::iterator iter = std::find_if(_pendingExecutions.begin(), _pendingExecutions.end(),
                                                 [&detail](const ExecutionDetail &other) -> bool {
@@ -57,16 +51,12 @@ STDMETHODIMP_(UINT) CProxyCopyHook::CopyCallback(HWND hwnd, UINT wFunc, UINT wFl
     if (iter == _pendingExecutions.end()) {
         detail.sources.append(" ").append(QuotePath(pszSrcFile));
         iter = _pendingExecutions.insert(_pendingExecutions.end(), detail);
-        ExecutionParameter *param = new ExecutionParameter { this, iter };
-
-        if (CreateThread(nullptr, 0, ExecutionThreadProc, param, 0, nullptr) == nullptr) {
-            ret = IDYES;
-        }
+        std::thread(&CProxyCopyHook::ExecutionThreadProc, this, iter).detach();
     } else {
         iter->sources.append(" ").append(QuotePath(pszSrcFile));
     }
 
-    LeaveCriticalSection(&_cs);
+    _mutex.unlock();
     return ret;
 }
 
@@ -81,9 +71,8 @@ CProxyCopyHook::ExecutionDetail::ExecutionDetail(UINT func, PCSTR dest)
     }
 }
 
-DWORD WINAPI CProxyCopyHook::ExecutionThreadProc(LPVOID parameter) {
-    const ExecutionParameter *param = (const ExecutionParameter *) parameter;
-    const ExecutionDetail &detail = *param->iter;
+void CProxyCopyHook::ExecutionThreadProc(const ExecutionList::iterator iter) {
+    const ExecutionDetail &detail = *iter;
 
     size_t prevSourceSize = 0;
     while (prevSourceSize != detail.sources.size()) {
@@ -103,10 +92,10 @@ DWORD WINAPI CProxyCopyHook::ExecutionThreadProc(LPVOID parameter) {
         cmdlineOperation = "delete";
         break;
     default:
-        return 1;
+        return;
     }
 
-    std::string cmdline = param->instance->_copierCmdline;
+    std::string cmdline = _copierCmdline;
     cmdline.append(" /cmd=")
         .append(cmdlineOperation);
 
@@ -115,13 +104,12 @@ DWORD WINAPI CProxyCopyHook::ExecutionThreadProc(LPVOID parameter) {
             .append(detail.destination);
     }
 
-    EnterCriticalSection(&param->instance->_cs);
+    _mutex.lock();
 
     cmdline.append(detail.sources);
-    param->instance->_pendingExecutions.erase(param->iter);
+    _pendingExecutions.erase(iter);
 
-    LeaveCriticalSection(&param->instance->_cs);
-    delete param;
+    _mutex.unlock();
 
     STARTUPINFO si = { sizeof(si) };
     PROCESS_INFORMATION pi;
@@ -129,8 +117,6 @@ DWORD WINAPI CProxyCopyHook::ExecutionThreadProc(LPVOID parameter) {
         CloseHandle(pi.hThread);
         CloseHandle(pi.hProcess);
     }
-
-    return 0;
 }
 
 const char *CProxyCopyHook::QuotePath(PCSTR path) {

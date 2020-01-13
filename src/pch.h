@@ -21,5 +21,7 @@
 
 #include <list>
 #include <string>
+#include <mutex>
+#include <thread>
 
 #include "resource.h"

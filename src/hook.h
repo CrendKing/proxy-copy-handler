@@ -10,7 +10,6 @@ class ATL_NO_VTABLE CProxyCopyHook
     , public ATL::IDispatchImpl<IProxyCopyHook, &IID_IProxyCopyHook, &LIBID_ProxyCopyHandlerLib> {
 public:
     CProxyCopyHook();
-    ~CProxyCopyHook();
 
     STDMETHOD_(UINT, CopyCallback)(HWND hwnd, UINT wFunc, UINT wFlags, PCSTR pszSrcFile, DWORD dwSrcAttribs, PCSTR pszDestFile, DWORD dwDestAttribs);
 
@@ -35,15 +34,10 @@ private:
 
     typedef std::list<ExecutionDetail> ExecutionList;
 
-    struct ExecutionParameter {
-        CProxyCopyHook *instance;
-        ExecutionList::iterator iter;
-    };
-
-    static DWORD WINAPI ExecutionThreadProc(LPVOID hook);
+    void ExecutionThreadProc(const ExecutionList::iterator iter);
     const char *QuotePath(PCSTR path);
 
-    CRITICAL_SECTION _cs;
+    std::mutex _mutex;
     std::string _copierCmdline;
     ExecutionList _pendingExecutions;
     char _quotedPathBuffer[MAX_PATH];
