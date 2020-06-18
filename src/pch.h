@@ -1,6 +1,14 @@
 #pragma once
 
-#define STRICT
+#include <codeanalysis/warnings.h>
+#pragma warning(push)
+#pragma warning(disable: ALL_CODE_ANALYSIS_WARNINGS 26812)
+
+#include <list>
+#include <string>
+#include <mutex>
+#include <thread>
+
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
@@ -19,9 +27,6 @@
 #include <shellapi.h>
 #include <shlobj.h>
 
-#include <list>
-#include <string>
-#include <mutex>
-#include <thread>
+#pragma warning(pop)
 
 #include "resource.h"
