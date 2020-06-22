@@ -4,7 +4,7 @@
 
 static constexpr char *REGISTRY_KEY_NAME = "Software\\ProxyCopyHandler";
 static constexpr char *REGISTRY_COPIER_PATH_VALUE_NAME = "CopierPath";
-static constexpr char *COPIER_CMDLINE_OPTIONS = " /auto_close /open_window /no_confirm_del";
+static constexpr char *REGISTRY_COPIER_ARGS_VALUE_NAME = "CopierArgs";
 static constexpr int EXECUTION_DELAY = 100;
 
 CProxyCopyHook::CProxyCopyHook()
@@ -12,12 +12,18 @@ CProxyCopyHook::CProxyCopyHook()
     HKEY registryKey;
 
     if (RegCreateKeyEx(HKEY_CURRENT_USER, REGISTRY_KEY_NAME, 0, nullptr, 0, KEY_QUERY_VALUE, nullptr, &registryKey, nullptr) == ERROR_SUCCESS) {
-        char regValueData[MAX_PATH];
-        DWORD regValueSize = MAX_PATH;
+        char regValueData[1024];
+        DWORD regValueSize;
+
+        regValueSize = sizeof(regValueData);
         if (RegGetValue(registryKey, nullptr, REGISTRY_COPIER_PATH_VALUE_NAME, RRF_RT_REG_SZ, nullptr, regValueData, &regValueSize) == ERROR_SUCCESS) {
             // remove the '\0'
-            _copierCmdline.assign(regValueData, regValueSize - 1)
-                .append(COPIER_CMDLINE_OPTIONS);
+            _copierCmdline.assign(regValueData, regValueSize - 1);
+        }
+
+        regValueSize = sizeof(regValueData);
+        if (RegGetValue(registryKey, nullptr, REGISTRY_COPIER_ARGS_VALUE_NAME, RRF_RT_REG_SZ, nullptr, regValueData, &regValueSize) == ERROR_SUCCESS) {
+            _copierCmdline.append(" ").append(regValueData, regValueSize - 1);
         }
         RegCloseKey(registryKey);
     }
@@ -46,7 +52,6 @@ STDMETHODIMP_(UINT) CProxyCopyHook::CopyCallback(HWND hwnd, UINT wFunc, UINT wFl
                                                 [&detail](const ExecutionDetail &other) -> bool {
         return detail.operation == other.operation && strncmp(detail.destination, other.destination, MAX_PATH) == 0;
     });
-    UINT ret = IDNO;
 
     if (iter == _pendingExecutions.end()) {
         detail.sources.append(" ").append(QuotePath(pszSrcFile));
@@ -57,7 +62,7 @@ STDMETHODIMP_(UINT) CProxyCopyHook::CopyCallback(HWND hwnd, UINT wFunc, UINT wFl
     }
 
     _mutex.unlock();
-    return ret;
+    return IDNO;
 }
 
 CProxyCopyHook::ExecutionDetail::ExecutionDetail(UINT func, PCSTR dest)
@@ -120,7 +125,7 @@ void CProxyCopyHook::ExecutionThreadProc(const ExecutionList::iterator iter) {
 }
 
 const char *CProxyCopyHook::QuotePath(PCSTR path) {
-    if (path == '\0') {
+    if (path == nullptr) {
         return path;
     }
 
