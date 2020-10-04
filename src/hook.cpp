@@ -5,10 +5,14 @@
 static constexpr char *REGISTRY_KEY_NAME = "Software\\ProxyCopyHandler";
 static constexpr char *REGISTRY_COPIER_PATH_VALUE_NAME = "CopierPath";
 static constexpr char *REGISTRY_COPIER_ARGS_VALUE_NAME = "CopierArgs";
-static constexpr int EXECUTION_DELAY = 100;
+static int64_t QUEUE_SOURCES_DELAY_100_NS = -1000000;
+
+char CProxyCopyHook::_quotedPathBuffer[] {};
 
 CProxyCopyHook::CProxyCopyHook()
-    : _quotedPathBuffer { 0 } {
+    : _waitEvent(CreateEvent(nullptr, FALSE, FALSE, nullptr))
+    , _waitTp(CreateThreadpoolWait(WaitCallback, this, nullptr))
+    , _stopWorker(false) {
     HKEY registryKey;
 
     if (RegCreateKeyEx(HKEY_CURRENT_USER, REGISTRY_KEY_NAME, 0, nullptr, 0, KEY_QUERY_VALUE, nullptr, &registryKey, nullptr) == ERROR_SUCCESS) {
@@ -29,6 +33,22 @@ CProxyCopyHook::CProxyCopyHook()
     }
 }
 
+CProxyCopyHook::~CProxyCopyHook() {
+    if (_workerThread.joinable()) {
+        _stopWorker = true;
+        _cv.notify_all();
+        _workerThread.join();
+    }
+
+    if (_waitTp != nullptr) {
+        CloseThreadpoolWait(_waitTp);
+    }
+
+    if (_waitEvent != nullptr) {
+        CloseHandle(_waitEvent);
+    }
+}
+
 STDMETHODIMP_(UINT) CProxyCopyHook::CopyCallback(HWND hwnd, UINT wFunc, UINT wFlags, PCSTR pszSrcFile, DWORD dwSrcAttribs, PCSTR pszDestFile, DWORD dwDestAttribs) {
     if (_copierCmdline.empty()) {
         return IDYES;
@@ -44,83 +64,55 @@ STDMETHODIMP_(UINT) CProxyCopyHook::CopyCallback(HWND hwnd, UINT wFunc, UINT wFl
         return IDYES;
     }
 
-    ExecutionDetail detail(wFunc, pszDestFile);
-
-    _mutex.lock();
-
-    ExecutionList::iterator iter = std::find_if(_pendingExecutions.begin(), _pendingExecutions.end(),
-                                                [&detail](const ExecutionDetail &other) -> bool {
-        return detail.operation == other.operation && strncmp(detail.destination, other.destination, MAX_PATH) == 0;
-    });
-
-    if (iter == _pendingExecutions.end()) {
-        detail.sources.append(" ").append(QuotePath(pszSrcFile));
-        iter = _pendingExecutions.insert(_pendingExecutions.end(), detail);
-        std::thread(&CProxyCopyHook::ExecutionThreadProc, this, iter).detach();
-    } else {
-        iter->sources.append(" ").append(QuotePath(pszSrcFile));
+    if (_waitEvent == nullptr || _waitTp == nullptr) {
+        return IDYES;
     }
 
-    _mutex.unlock();
+    const ExecutionKey execKey(wFunc, pszDestFile);
+
+    {
+        const std::unique_lock lock(_mutex);
+        _pendingExecutions[execKey].append(" ").append(QuotePath(pszSrcFile));
+    }
+
+    SetThreadpoolWait(_waitTp, _waitEvent, reinterpret_cast<FILETIME *>(&QUEUE_SOURCES_DELAY_100_NS));
+
     return IDNO;
 }
 
-CProxyCopyHook::ExecutionDetail::ExecutionDetail(UINT func, PCSTR dest)
+CProxyCopyHook::ExecutionKey::ExecutionKey(UINT func, PCSTR dest)
     : operation(func) {
-    strcpy_s(destination, MAX_PATH, dest);
+    if (dest[0] != '\0') {
+        char path[MAX_PATH];
 
-    if (destination[0] != '\0') {
-        PathRemoveFileSpec(destination);
-        PathAddBackslash(destination);
-        PathQuoteSpaces(destination);
+        strcpy_s(path, MAX_PATH, dest);
+        PathRemoveFileSpec(path);
+        PathAddBackslash(path);
+        PathQuoteSpaces(path);
+        destination = path;
     }
 }
 
-void CProxyCopyHook::ExecutionThreadProc(const ExecutionList::iterator iter) {
-    const ExecutionDetail &detail = *iter;
+bool CProxyCopyHook::ExecutionKey::operator==(const ExecutionKey &other) const {
+    return operation == other.operation && destination == other.destination;
+}
 
-    size_t prevSourceSize = 0;
-    while (prevSourceSize != detail.sources.size()) {
-        prevSourceSize = detail.sources.size();
-        Sleep(EXECUTION_DELAY);
-    }
+size_t CProxyCopyHook::ExecutionKey::Hasher::operator()(const ExecutionKey &key) const {
+    const size_t h1 = std::hash<UINT> {} (key.operation);
+    const size_t h2 = std::hash<std::string> {} (key.destination);
+    return h1 ^ (h2 << 1);
+}
 
-    const char *cmdlineOperation;
-    switch (detail.operation) {
-    case FO_MOVE:
-        cmdlineOperation = "move";
-        break;
-    case FO_COPY:
-        cmdlineOperation = "diff";
-        break;
-    case FO_DELETE:
-        cmdlineOperation = "delete";
-        break;
-    default:
-        return;
-    }
+void CALLBACK CProxyCopyHook::WaitCallback(PTP_CALLBACK_INSTANCE Instance,
+                                           PVOID                 Context,
+                                           PTP_WAIT              Wait,
+                                           TP_WAIT_RESULT        WaitResult) {
+    CProxyCopyHook *hook = static_cast<CProxyCopyHook *>(Context);
 
-    std::string cmdline = _copierCmdline;
-    cmdline.append(" /cmd=")
-        .append(cmdlineOperation);
-
-    if (detail.destination[0] != '\0') {
-        cmdline.append(" /to=")
-            .append(detail.destination);
-    }
-
-    _mutex.lock();
-
-    cmdline.append(detail.sources);
-    _pendingExecutions.erase(iter);
-
-    _mutex.unlock();
-
-    STARTUPINFO si = { sizeof(si) };
-    PROCESS_INFORMATION pi;
-    if (CreateProcess(nullptr, const_cast<char *>(cmdline.c_str()), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
-        CloseHandle(pi.hThread);
-        CloseHandle(pi.hProcess);
+    if (hook->_workerThread.joinable()) {
+        hook->_cv.notify_one();
+    } else {
+        hook->_workerThread = std::thread(&CProxyCopyHook::WorkerProc, hook);
     }
 }
 
@@ -132,4 +124,53 @@ const char *CProxyCopyHook::QuotePath(PCSTR path) {
     strcpy_s(_quotedPathBuffer, MAX_PATH, path);
     PathQuoteSpaces(_quotedPathBuffer);
     return _quotedPathBuffer;
+}
+
+void CProxyCopyHook::WorkerProc() {
+    while (!_stopWorker) {
+        std::unique_lock lock(_mutex);
+
+        _cv.wait(lock, [this]() { return _stopWorker || !_pendingExecutions.empty(); });
+
+        if (_stopWorker) {
+            continue;
+        }
+
+        auto [key, sources] = *_pendingExecutions.cbegin();
+        _pendingExecutions.erase(_pendingExecutions.cbegin());
+        lock.unlock();
+
+        const char *cmdlineOperation;
+        switch (key.operation) {
+        case FO_MOVE:
+            cmdlineOperation = "move";
+            break;
+        case FO_COPY:
+            cmdlineOperation = "diff";
+            break;
+        case FO_DELETE:
+            cmdlineOperation = "delete";
+            break;
+        default:
+            return;
+        }
+
+        std::string cmdline = _copierCmdline;
+        cmdline.append(" /cmd=")
+            .append(cmdlineOperation);
+
+        if (!key.destination.empty()) {
+            cmdline.append(" /to=")
+                .append(key.destination);
+        }
+
+        cmdline.append(sources);
+
+        STARTUPINFO si = { sizeof(si) };
+        PROCESS_INFORMATION pi;
+        if (CreateProcess(nullptr, const_cast<char *>(cmdline.c_str()), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+            CloseHandle(pi.hThread);
+            CloseHandle(pi.hProcess);
+        }
+    }
 }

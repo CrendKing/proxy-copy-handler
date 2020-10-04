@@ -52,15 +52,16 @@
     </ResourceCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="src\proxy_copy_handler.def">
-      <Filter>Source Files</Filter>
-    </None>
     <None Include="src\proxy_copy_hook.rgs">
       <Filter>Resource Files</Filter>
     </None>
+    <None Include="src\$(ProjectName).def">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include=".editorconfig" />
   </ItemGroup>
   <ItemGroup>
-    <Midl Include="src\proxy_copy_handler.idl">
+    <Midl Include="src\$(ProjectName).idl">
       <Filter>Source Files</Filter>
     </Midl>
   </ItemGroup>

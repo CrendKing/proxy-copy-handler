@@ -10,8 +10,9 @@ class ATL_NO_VTABLE CProxyCopyHook
     , public ATL::IDispatchImpl<IProxyCopyHook, &IID_IProxyCopyHook, &LIBID_ProxyCopyHandlerLib> {
 public:
     CProxyCopyHook();
+    virtual ~CProxyCopyHook();
 
-    STDMETHOD_(UINT, CopyCallback)(HWND hwnd, UINT wFunc, UINT wFlags, PCSTR pszSrcFile, DWORD dwSrcAttribs, PCSTR pszDestFile, DWORD dwDestAttribs);
+    STDMETHOD_(UINT, CopyCallback)(HWND hwnd, UINT wFunc, UINT wFlags, PCSTR pszSrcFile, DWORD dwSrcAttribs, PCSTR pszDestFile, DWORD dwDestAttribs) override;
 
     DECLARE_REGISTRY_RESOURCEID(IDS_PROXY_COPY_HOOK)
 
@@ -24,23 +25,38 @@ public:
     DECLARE_PROTECT_FINAL_CONSTRUCT()
 
 private:
-    struct ExecutionDetail {
+    struct ExecutionKey {
         UINT operation;
-        std::string sources;
-        char destination[MAX_PATH];
+        std::string destination;
 
-        ExecutionDetail(UINT func, PCSTR dest);
+        ExecutionKey(UINT func, PCSTR dest);
+        bool operator==(const ExecutionKey &other) const;
+
+        struct Hasher {
+            size_t operator()(const ExecutionKey &key) const;
+        };
     };
 
-    typedef std::list<ExecutionDetail> ExecutionList;
+    static void CALLBACK WaitCallback(PTP_CALLBACK_INSTANCE Instance,
+                                      PVOID                 Context,
+                                      PTP_WAIT              Wait,
+                                      TP_WAIT_RESULT        WaitResult);
+    static const char *QuotePath(PCSTR path);
 
-    void ExecutionThreadProc(const ExecutionList::iterator iter);
-    const char *QuotePath(PCSTR path);
+    void WorkerProc();
+
+    static char _quotedPathBuffer[MAX_PATH];
 
     std::mutex _mutex;
+    std::condition_variable _cv;
+    std::thread _workerThread;
+    HANDLE _waitEvent;
+    PTP_WAIT _waitTp;
+
+    bool _stopWorker;
+
     std::string _copierCmdline;
-    ExecutionList _pendingExecutions;
-    char _quotedPathBuffer[MAX_PATH];
+    std::unordered_map<ExecutionKey, std::string, ExecutionKey::Hasher> _pendingExecutions;
 };
 
 OBJECT_ENTRY_AUTO(__uuidof(ProxyCopyHook), CProxyCopyHook)
