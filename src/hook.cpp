@@ -50,6 +50,10 @@ CProxyCopyHook::~CProxyCopyHook() {
 }
 
 STDMETHODIMP_(UINT) CProxyCopyHook::CopyCallback(HWND hwnd, UINT wFunc, UINT wFlags, PCSTR pszSrcFile, DWORD dwSrcAttribs, PCSTR pszDestFile, DWORD dwDestAttribs) {
+    if (_waitEvent == nullptr || _waitTp == nullptr) {
+        return IDYES;
+    }
+
     if (_copierCmdline.empty()) {
         return IDYES;
     }
@@ -64,15 +68,11 @@ STDMETHODIMP_(UINT) CProxyCopyHook::CopyCallback(HWND hwnd, UINT wFunc, UINT wFl
         return IDYES;
     }
 
-    if (_waitEvent == nullptr || _waitTp == nullptr) {
-        return IDYES;
-    }
-
     const ExecutionKey execKey(wFunc, pszDestFile);
 
     {
         const std::unique_lock lock(_mutex);
-        _pendingExecutions[execKey].append(" ").append(QuotePath(pszSrcFile));
+        _pendingExecutions[execKey].emplace_back(pszSrcFile);
     }
 
     SetThreadpoolWait(_waitTp, _waitEvent, reinterpret_cast<FILETIME *>(&QUEUE_SOURCES_DELAY_100_NS));
@@ -130,7 +130,9 @@ void CProxyCopyHook::WorkerProc() {
     while (!_stopWorker) {
         std::unique_lock lock(_mutex);
 
-        _cv.wait(lock, [this]() { return _stopWorker || !_pendingExecutions.empty(); });
+        _cv.wait(lock, [this]() -> bool {
+            return _stopWorker || !_pendingExecutions.empty();
+        });
 
         if (_stopWorker) {
             continue;
@@ -139,6 +141,17 @@ void CProxyCopyHook::WorkerProc() {
         auto [key, sources] = *_pendingExecutions.cbegin();
         _pendingExecutions.erase(_pendingExecutions.cbegin());
         lock.unlock();
+
+        std::string sourceArg;
+        for (std::string &s : sources) {
+            if (PathFileExists(s.c_str())) {
+                sourceArg.append(" ").append(QuotePath(s.c_str()));
+            }
+        }
+
+        if (sourceArg.empty()) {
+            continue;
+        }
 
         const char *cmdlineOperation;
         switch (key.operation) {
@@ -164,7 +177,7 @@ void CProxyCopyHook::WorkerProc() {
                 .append(key.destination);
         }
 
-        cmdline.append(sources);
+        cmdline.append(sourceArg);
 
         STARTUPINFO si = { sizeof(si) };
         PROCESS_INFORMATION pi;

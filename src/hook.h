@@ -56,7 +56,7 @@ private:
     bool _stopWorker;
 
     std::string _copierCmdline;
-    std::unordered_map<ExecutionKey, std::string, ExecutionKey::Hasher> _pendingExecutions;
+    std::unordered_map<ExecutionKey, std::vector<std::string>, ExecutionKey::Hasher> _pendingExecutions;
 };
 
 OBJECT_ENTRY_AUTO(__uuidof(ProxyCopyHook), CProxyCopyHook)
