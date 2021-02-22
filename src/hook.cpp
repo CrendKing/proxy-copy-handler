@@ -2,32 +2,32 @@
 #include "hook.h"
 
 
-static constexpr char *REGISTRY_KEY_NAME = "Software\\ProxyCopyHandler";
-static constexpr char *REGISTRY_COPIER_PATH_VALUE_NAME = "CopierPath";
-static constexpr char *REGISTRY_COPIER_ARGS_VALUE_NAME = "CopierArgs";
+static constexpr const WCHAR *REGISTRY_KEY_NAME = LR"("Software\ProxyCopyHandler")";
+static constexpr const WCHAR *REGISTRY_COPIER_PATH_VALUE_NAME = L"CopierPath";
+static constexpr const WCHAR *REGISTRY_COPIER_ARGS_VALUE_NAME = L"CopierArgs";
 static int64_t QUEUE_SOURCES_DELAY_100_NS = -1000000;
 
-char CProxyCopyHook::_quotedPathBuffer[] {};
+std::array<WCHAR, MAX_PATH> CProxyCopyHook::_quotedPathBuffer {};
 
 CProxyCopyHook::CProxyCopyHook()
-    : _waitEvent(CreateEvent(nullptr, FALSE, FALSE, nullptr))
+    : _waitEvent(CreateEventW(nullptr, FALSE, FALSE, nullptr))
     , _waitTp(CreateThreadpoolWait(WaitCallback, this, nullptr))
     , _stopWorker(false) {
     HKEY registryKey;
 
-    if (RegCreateKeyEx(HKEY_CURRENT_USER, REGISTRY_KEY_NAME, 0, nullptr, 0, KEY_QUERY_VALUE, nullptr, &registryKey, nullptr) == ERROR_SUCCESS) {
-        char regValueData[1024];
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, REGISTRY_KEY_NAME, 0, nullptr, 0, KEY_QUERY_VALUE, nullptr, &registryKey, nullptr) == ERROR_SUCCESS) {
+        std::array<WCHAR, 1024> regValueData;
         DWORD regValueSize;
 
-        regValueSize = sizeof(regValueData);
-        if (RegGetValue(registryKey, nullptr, REGISTRY_COPIER_PATH_VALUE_NAME, RRF_RT_REG_SZ, nullptr, regValueData, &regValueSize) == ERROR_SUCCESS) {
+        regValueSize = static_cast<DWORD>(regValueData.size());
+        if (RegGetValueW(registryKey, nullptr, REGISTRY_COPIER_PATH_VALUE_NAME, RRF_RT_REG_SZ, nullptr, regValueData.data(), &regValueSize) == ERROR_SUCCESS) {
             // remove the '\0'
-            _copierCmdline.assign(regValueData, regValueSize - 1);
+            _copierCmdline.assign(regValueData.data(), regValueSize - 1);
         }
 
-        regValueSize = sizeof(regValueData);
-        if (RegGetValue(registryKey, nullptr, REGISTRY_COPIER_ARGS_VALUE_NAME, RRF_RT_REG_SZ, nullptr, regValueData, &regValueSize) == ERROR_SUCCESS) {
-            _copierCmdline.append(" ").append(regValueData, regValueSize - 1);
+        regValueSize = static_cast<DWORD>(regValueData.size());
+        if (RegGetValueW(registryKey, nullptr, REGISTRY_COPIER_ARGS_VALUE_NAME, RRF_RT_REG_SZ, nullptr, regValueData.data(), &regValueSize) == ERROR_SUCCESS) {
+            _copierCmdline.append(L" ").append(regValueData.data(), regValueSize - 1);
         }
         RegCloseKey(registryKey);
     }
@@ -49,7 +49,7 @@ CProxyCopyHook::~CProxyCopyHook() {
     }
 }
 
-STDMETHODIMP_(UINT) CProxyCopyHook::CopyCallback(HWND hwnd, UINT wFunc, UINT wFlags, PCSTR pszSrcFile, DWORD dwSrcAttribs, PCSTR pszDestFile, DWORD dwDestAttribs) {
+STDMETHODIMP_(UINT) CProxyCopyHook::CopyCallback(HWND hwnd, UINT wFunc, UINT wFlags, PCWSTR pszSrcFile, DWORD dwSrcAttribs, PCWSTR pszDestFile, DWORD dwDestAttribs) {
     if (_waitEvent == nullptr || _waitTp == nullptr) {
         return IDYES;
     }
@@ -64,7 +64,7 @@ STDMETHODIMP_(UINT) CProxyCopyHook::CopyCallback(HWND hwnd, UINT wFunc, UINT wFl
 
     // Windows can move file without copying within the same volume (ref. MOVEFILE_COPY_ALLOWED)
     // FastCopy move is always copy-then-delete
-    if (wFunc == FO_MOVE && PathGetDriveNumber(pszSrcFile) == PathGetDriveNumber(pszDestFile)) {
+    if (wFunc == FO_MOVE && PathGetDriveNumberW(pszSrcFile) == PathGetDriveNumberW(pszDestFile)) {
         return IDYES;
     }
 
@@ -80,16 +80,16 @@ STDMETHODIMP_(UINT) CProxyCopyHook::CopyCallback(HWND hwnd, UINT wFunc, UINT wFl
     return IDNO;
 }
 
-CProxyCopyHook::ExecutionKey::ExecutionKey(UINT func, PCSTR dest)
+CProxyCopyHook::ExecutionKey::ExecutionKey(UINT func, PCWSTR dest)
     : operation(func) {
-    if (dest[0] != '\0') {
-        char path[MAX_PATH];
+    if (dest[0] != L'\0') {
+        std::array<WCHAR, MAX_PATH> path {};
 
-        strcpy_s(path, MAX_PATH, dest);
-        PathRemoveFileSpec(path);
-        PathAddBackslash(path);
-        PathQuoteSpaces(path);
-        destination = path;
+        wcscpy_s(path.data(), path.size(), dest);
+        PathRemoveFileSpecW(path.data());
+        PathAddBackslashW(path.data());
+        PathQuoteSpacesW(path.data());
+        destination = path.data();
     }
 }
 
@@ -99,7 +99,7 @@ bool CProxyCopyHook::ExecutionKey::operator==(const ExecutionKey &other) const {
 
 size_t CProxyCopyHook::ExecutionKey::Hasher::operator()(const ExecutionKey &key) const {
     const size_t h1 = std::hash<UINT> {} (key.operation);
-    const size_t h2 = std::hash<std::string> {} (key.destination);
+    const size_t h2 = std::hash<std::wstring> {} (key.destination);
     return h1 ^ (h2 << 1);
 }
 
@@ -116,14 +116,14 @@ void CALLBACK CProxyCopyHook::WaitCallback(PTP_CALLBACK_INSTANCE Instance,
     }
 }
 
-const char *CProxyCopyHook::QuotePath(PCSTR path) {
+auto CProxyCopyHook::QuotePath(PCWSTR path) -> const WCHAR * {
     if (path == nullptr) {
         return path;
     }
 
-    strcpy_s(_quotedPathBuffer, MAX_PATH, path);
-    PathQuoteSpaces(_quotedPathBuffer);
-    return _quotedPathBuffer;
+    wcscpy_s(_quotedPathBuffer.data(), _quotedPathBuffer.size(), path);
+    PathQuoteSpacesW(_quotedPathBuffer.data());
+    return _quotedPathBuffer.data();
 }
 
 void CProxyCopyHook::WorkerProc() {
@@ -142,10 +142,10 @@ void CProxyCopyHook::WorkerProc() {
         _pendingExecutions.erase(_pendingExecutions.cbegin());
         lock.unlock();
 
-        std::string sourceArg;
-        for (std::string &s : sources) {
+        std::wstring sourceArg;
+        for (std::wstring &s : sources) {
             if (PathFileExists(s.c_str())) {
-                sourceArg.append(" ").append(QuotePath(s.c_str()));
+                sourceArg.append(L" ").append(QuotePath(s.c_str()));
             }
         }
 
@@ -153,35 +153,35 @@ void CProxyCopyHook::WorkerProc() {
             continue;
         }
 
-        const char *cmdlineOperation;
+        const WCHAR *cmdlineOperation;
         switch (key.operation) {
         case FO_MOVE:
-            cmdlineOperation = "move";
+            cmdlineOperation = L"move";
             break;
         case FO_COPY:
-            cmdlineOperation = "diff";
+            cmdlineOperation = L"diff";
             break;
         case FO_DELETE:
-            cmdlineOperation = "delete";
+            cmdlineOperation = L"delete";
             break;
         default:
             return;
         }
 
-        std::string cmdline = _copierCmdline;
-        cmdline.append(" /cmd=")
+        std::wstring cmdline = _copierCmdline;
+        cmdline.append(L" /cmd=")
             .append(cmdlineOperation);
 
         if (!key.destination.empty()) {
-            cmdline.append(" /to=")
+            cmdline.append(L" /to=")
                 .append(key.destination);
         }
 
         cmdline.append(sourceArg);
 
-        STARTUPINFO si = { sizeof(si) };
+        STARTUPINFOW si = { .cb = sizeof(si) };
         PROCESS_INFORMATION pi;
-        if (CreateProcess(nullptr, const_cast<char *>(cmdline.c_str()), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+        if (CreateProcessW(nullptr, cmdline.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
             CloseHandle(pi.hThread);
             CloseHandle(pi.hProcess);
         }

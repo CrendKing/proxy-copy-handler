@@ -2,14 +2,16 @@
 
 #include <codeanalysis/warnings.h>
 #pragma warning(push)
-#pragma warning(disable: ALL_CODE_ANALYSIS_WARNINGS 26812)
+#pragma warning(disable: ALL_CODE_ANALYSIS_WARNINGS)
 
+#include <array>
 #include <mutex>
 #include <string>
 #include <thread>
 #include <unordered_map>
 
 #define WIN32_LEAN_AND_MEAN
+#define STRICT
 #include <windows.h>
 
 #define _ATL_APARTMENT_THREADED
@@ -30,3 +32,6 @@
 #pragma warning(pop)
 
 #include "resource.h"
+
+#pragma warning(push)
+#pragma warning(disable: 26812)

@@ -7,38 +7,38 @@ public:
     DECLARE_LIBID(LIBID_ProxyCopyHandlerLib)
 } _module;
 
-extern "C" BOOL WINAPI DllMain(HINSTANCE hInstance, DWORD dwReason, LPVOID lpReserved) {
+extern "C" auto WINAPI DllMain(HINSTANCE hInstance, DWORD dwReason, LPVOID lpReserved) -> BOOL {
     return _module.DllMain(dwReason, lpReserved);
 }
 
 // Used to determine whether the DLL can be unloaded by OLE.
 _Use_decl_annotations_
-STDAPI DllCanUnloadNow(void) {
+extern "C" auto STDAPICALLTYPE DllCanUnloadNow(void) -> HRESULT {
     return _module.DllCanUnloadNow();
 }
 
 // Returns a class factory to create an object of the requested type.
 _Use_decl_annotations_
-STDAPI DllGetClassObject(_In_ REFCLSID rclsid, _In_ REFIID riid, _Outptr_ LPVOID FAR *ppv) {
+extern "C" auto STDAPICALLTYPE DllGetClassObject(_In_ REFCLSID rclsid, _In_ REFIID riid, _Outptr_ LPVOID FAR *ppv) -> HRESULT {
     return _module.DllGetClassObject(rclsid, riid, ppv);
 }
 
 // DllRegisterServer - Adds entries to the system registry.
 _Use_decl_annotations_
-STDAPI DllRegisterServer(void) {
+extern "C" auto STDAPICALLTYPE DllRegisterServer(void) -> HRESULT {
     // registers object, typelib and all interfaces in typelib
     return _module.DllRegisterServer();
 }
 
 // DllUnregisterServer - Removes entries from the system registry.
 _Use_decl_annotations_
-STDAPI DllUnregisterServer(void) {
+extern "C" auto STDAPICALLTYPE DllUnregisterServer(void) -> HRESULT {
     return _module.DllUnregisterServer();
 }
 
 // DllInstall - Adds/Removes entries to the system registry per user per machine.
 _Use_decl_annotations_
-STDAPI DllInstall(BOOL bInstall, _In_opt_ PCWSTR pszCmdLine) {
+extern "C" auto STDAPICALLTYPE DllInstall(BOOL bInstall, _In_opt_ PCWSTR pszCmdLine) -> HRESULT {
     HRESULT hr = E_FAIL;
     static const wchar_t szUserSwitch[] = L"user";
 
