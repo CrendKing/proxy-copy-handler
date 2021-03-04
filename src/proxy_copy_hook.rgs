@@ -10,7 +10,7 @@ HKCR
 			}
 		}
 	}
-	
+
 	NoRemove Directory
 	{
 		NoRemove ShellEx

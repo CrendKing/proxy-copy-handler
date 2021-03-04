@@ -25,5 +25,3 @@ library ProxyCopyHandlerLib
         [default] interface IProxyCopyHook;
     };
 };
-
-import "shobjidl.idl";

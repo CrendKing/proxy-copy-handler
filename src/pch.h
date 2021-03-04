@@ -11,7 +11,6 @@
 #include <unordered_map>
 
 #define WIN32_LEAN_AND_MEAN
-#define STRICT
 #include <windows.h>
 
 #define _ATL_APARTMENT_THREADED

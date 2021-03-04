@@ -58,7 +58,6 @@
     <None Include="src\$(ProjectName).def">
       <Filter>Source Files</Filter>
     </None>
-    <None Include=".editorconfig" />
   </ItemGroup>
   <ItemGroup>
     <Midl Include="src\$(ProjectName).idl">

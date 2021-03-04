@@ -9,10 +9,7 @@ static int64_t QUEUE_SOURCES_DELAY_100_NS = -1000000;
 
 std::array<WCHAR, MAX_PATH> CProxyCopyHook::_quotedPathBuffer {};
 
-CProxyCopyHook::CProxyCopyHook()
-    : _waitEvent(CreateEventW(nullptr, FALSE, FALSE, nullptr))
-    , _waitTp(CreateThreadpoolWait(WaitCallback, this, nullptr))
-    , _stopWorker(false) {
+CProxyCopyHook::CProxyCopyHook() {
     HKEY registryKey;
 
     if (RegCreateKeyExW(HKEY_CURRENT_USER, REGISTRY_KEY_NAME, 0, nullptr, 0, KEY_QUERY_VALUE, nullptr, &registryKey, nullptr) == ERROR_SUCCESS) {
@@ -49,7 +46,7 @@ CProxyCopyHook::~CProxyCopyHook() {
     }
 }
 
-STDMETHODIMP_(UINT) CProxyCopyHook::CopyCallback(HWND hwnd, UINT wFunc, UINT wFlags, PCWSTR pszSrcFile, DWORD dwSrcAttribs, PCWSTR pszDestFile, DWORD dwDestAttribs) {
+auto STDMETHODCALLTYPE CProxyCopyHook::CopyCallback(HWND hwnd, UINT wFunc, UINT wFlags, PCWSTR pszSrcFile, DWORD dwSrcAttribs, PCWSTR pszDestFile, DWORD dwDestAttribs) -> UINT {
     if (_waitEvent == nullptr || _waitTp == nullptr) {
         return IDYES;
     }
@@ -68,10 +65,11 @@ STDMETHODIMP_(UINT) CProxyCopyHook::CopyCallback(HWND hwnd, UINT wFunc, UINT wFl
         return IDYES;
     }
 
-    const ExecutionKey execKey(wFunc, pszDestFile);
-
     {
+        const ExecutionKey execKey(wFunc, pszDestFile);
+
         const std::unique_lock lock(_mutex);
+
         _pendingExecutions[execKey].emplace_back(pszSrcFile);
     }
 
@@ -93,23 +91,17 @@ CProxyCopyHook::ExecutionKey::ExecutionKey(UINT func, PCWSTR dest)
     }
 }
 
-bool CProxyCopyHook::ExecutionKey::operator==(const ExecutionKey &other) const {
-    return operation == other.operation && destination == other.destination;
-}
-
-size_t CProxyCopyHook::ExecutionKey::Hasher::operator()(const ExecutionKey &key) const {
+auto CProxyCopyHook::ExecutionKey::Hasher::operator()(const ExecutionKey &key) const -> size_t {
     const size_t h1 = std::hash<UINT> {} (key.operation);
     const size_t h2 = std::hash<std::wstring> {} (key.destination);
     return h1 ^ (h2 << 1);
 }
 
-void CALLBACK CProxyCopyHook::WaitCallback(PTP_CALLBACK_INSTANCE Instance,
+auto CALLBACK CProxyCopyHook::WaitCallback(PTP_CALLBACK_INSTANCE Instance,
                                            PVOID                 Context,
                                            PTP_WAIT              Wait,
-                                           TP_WAIT_RESULT        WaitResult) {
-    CProxyCopyHook *hook = static_cast<CProxyCopyHook *>(Context);
-
-    if (hook->_workerThread.joinable()) {
+                                           TP_WAIT_RESULT        WaitResult) -> void {
+    if (CProxyCopyHook *hook = static_cast<CProxyCopyHook *>(Context); hook->_workerThread.joinable()) {
         hook->_cv.notify_one();
     } else {
         hook->_workerThread = std::thread(&CProxyCopyHook::WorkerProc, hook);
@@ -126,7 +118,7 @@ auto CProxyCopyHook::QuotePath(PCWSTR path) -> const WCHAR * {
     return _quotedPathBuffer.data();
 }
 
-void CProxyCopyHook::WorkerProc() {
+auto CProxyCopyHook::WorkerProc() -> void {
     while (!_stopWorker) {
         std::unique_lock lock(_mutex);
 

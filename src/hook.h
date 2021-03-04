@@ -12,7 +12,7 @@ public:
     CProxyCopyHook();
     virtual ~CProxyCopyHook();
 
-    STDMETHOD_(UINT, CopyCallback)(HWND hwnd, UINT wFunc, UINT wFlags, PCWSTR pszSrcFile, DWORD dwSrcAttribs, PCWSTR pszDestFile, DWORD dwDestAttribs) override;
+    auto STDMETHODCALLTYPE CopyCallback(HWND hwnd, UINT wFunc, UINT wFlags, PCWSTR pszSrcFile, DWORD dwSrcAttribs, PCWSTR pszDestFile, DWORD dwDestAttribs) -> UINT override;
 
     DECLARE_REGISTRY_RESOURCEID(IDS_PROXY_COPY_HOOK)
 
@@ -30,30 +30,30 @@ private:
         std::wstring destination;
 
         ExecutionKey(UINT func, PCWSTR dest);
-        bool operator==(const ExecutionKey &other) const;
+        constexpr auto operator==(const ExecutionKey &other) const -> bool { return operation == other.operation && destination == other.destination; }
 
         struct Hasher {
-            size_t operator()(const ExecutionKey &key) const;
+            auto operator()(const ExecutionKey &key) const -> size_t;
         };
     };
 
-    static void CALLBACK WaitCallback(PTP_CALLBACK_INSTANCE Instance,
+    static auto CALLBACK WaitCallback(PTP_CALLBACK_INSTANCE Instance,
                                       PVOID                 Context,
                                       PTP_WAIT              Wait,
-                                      TP_WAIT_RESULT        WaitResult);
+                                      TP_WAIT_RESULT        WaitResult) -> void;
     static auto QuotePath(PCWSTR path) -> const WCHAR *;
 
-    void WorkerProc();
+    auto WorkerProc() -> void;
 
     static std::array<WCHAR, MAX_PATH> _quotedPathBuffer;
 
     std::mutex _mutex;
     std::condition_variable _cv;
     std::thread _workerThread;
-    HANDLE _waitEvent;
-    PTP_WAIT _waitTp;
+    HANDLE _waitEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    PTP_WAIT _waitTp = CreateThreadpoolWait(WaitCallback, this, nullptr);
 
-    bool _stopWorker;
+    bool _stopWorker = false;
 
     std::wstring _copierCmdline;
     std::unordered_map<ExecutionKey, std::vector<std::wstring>, ExecutionKey::Hasher> _pendingExecutions;
