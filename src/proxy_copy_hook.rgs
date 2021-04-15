@@ -1,47 +1,17 @@
-HKCR
-{
-	NoRemove CLSID
-	{
-		ForceRemove {4EB17DC6-A98E-42DE-9F3F-93A6819B08A4} = s 'ProxyCopyHook Class'
-		{
-			InprocServer32 = s '%MODULE%'
-			{
-				val ThreadingModel = s 'Apartment'
-			}
-		}
-	}
+HKCR {
+    NoRemove CLSID {
+        ForceRemove {4EB17DC6-A98E-42DE-9F3F-93A6819B08A4} = s 'Proxy Copy Hook Shell Extension' {
+            InprocServer32 = s '%MODULE%' {
+                val ThreadingModel = s 'Apartment'
+            }
+        }
+    }
 
-	NoRemove Directory
-	{
-		NoRemove ShellEx
-		{
-			NoRemove CopyHookHandlers
-			{
-				ProxyCopyHook = s '{4EB17DC6-A98E-42DE-9F3F-93A6819B08A4}'
-			}
-		}
-	}
-}
-
-HKLM
-{
-	NoRemove Software
-	{
-		NoRemove Microsoft
-		{
-			NoRemove Windows
-			{
-				NoRemove CurrentVersion
-				{
-					NoRemove 'Shell Extensions'
-					{
-						NoRemove Approved
-						{
-							val '{4EB17DC6-A98E-42DE-9F3F-93A6819B08A4}' = s 'Proxy Copy Hook'
-						}
-					}
-				}
-			}
-		}
-	}
+    NoRemove Directory {
+        NoRemove ShellEx {
+            NoRemove CopyHookHandlers {
+                ProxyCopyHook = s '{4EB17DC6-A98E-42DE-9F3F-93A6819B08A4}'
+            }
+        }
+    }
 }

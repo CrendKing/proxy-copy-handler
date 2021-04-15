@@ -25,7 +25,7 @@
     <ClCompile Include="src\hook.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\handler.cpp">
+    <ClCompile Include="src\module.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\proxy_copy_handler_i.c">

@@ -6,23 +6,20 @@
 class ATL_NO_VTABLE CProxyCopyHook
     : public ATL::CComObjectRoot
     , public ATL::CComCoClass<CProxyCopyHook, &CLSID_ProxyCopyHook>
-    , public ICopyHookW
-    , public ATL::IDispatchImpl<IProxyCopyHook, &IID_IProxyCopyHook, &LIBID_ProxyCopyHandlerLib> {
+    , public ICopyHookW {
 public:
     CProxyCopyHook();
-    virtual ~CProxyCopyHook();
-
-    auto STDMETHODCALLTYPE CopyCallback(HWND hwnd, UINT wFunc, UINT wFlags, PCWSTR pszSrcFile, DWORD dwSrcAttribs, PCWSTR pszDestFile, DWORD dwDestAttribs) -> UINT override;
+    ~CProxyCopyHook();
 
     DECLARE_REGISTRY_RESOURCEID(IDS_PROXY_COPY_HOOK)
 
+    DECLARE_PROTECT_FINAL_CONSTRUCT()
+
     BEGIN_COM_MAP(CProxyCopyHook)
-        COM_INTERFACE_ENTRY(IProxyCopyHook)
-        COM_INTERFACE_ENTRY(IDispatch)
-        COM_INTERFACE_ENTRY_IID(IID_IShellCopyHook, CProxyCopyHook)
+        COM_INTERFACE_ENTRY(ICopyHookW)
     END_COM_MAP()
 
-    DECLARE_PROTECT_FINAL_CONSTRUCT()
+    auto STDMETHODCALLTYPE CopyCallback(HWND hwnd, UINT wFunc, UINT wFlags, PCWSTR pszSrcFile, DWORD dwSrcAttribs, PCWSTR pszDestFile, DWORD dwDestAttribs) -> UINT override;
 
 private:
     struct ExecutionKey {
@@ -53,10 +50,8 @@ private:
     HANDLE _waitEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     PTP_WAIT _waitTp = CreateThreadpoolWait(WaitCallback, this, nullptr);
 
-    bool _stopWorker = false;
+    std::atomic<bool> _stopWorker = false;
 
     std::wstring _copierCmdline;
     std::unordered_map<ExecutionKey, std::vector<std::wstring>, ExecutionKey::Hasher> _pendingExecutions;
 };
-
-OBJECT_ENTRY_AUTO(__uuidof(ProxyCopyHook), CProxyCopyHook)

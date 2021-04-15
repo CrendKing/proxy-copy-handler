@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "hook.h"
+#include "proxy_copy_handler_h.h"
 
 
 class ProxyCopyHandlerModule : public ATL::CAtlDllModuleT<ProxyCopyHandlerModule> {
