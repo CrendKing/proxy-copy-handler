@@ -6,9 +6,10 @@ static constexpr const WCHAR *REGISTRY_KEY_NAME = LR"(Software\ProxyCopyHandler)
 static constexpr const WCHAR *REGISTRY_COPIER_PATH_VALUE_NAME = L"CopierPath";
 static constexpr const WCHAR *REGISTRY_COPIER_ARGS_VALUE_NAME = L"CopierArgs";
 static int64_t QUEUE_SOURCES_DELAY_100_NS = -1000000;
-std::array<WCHAR, MAX_PATH> CProxyCopyHook::_quotedPathBuffer {};
 
-OBJECT_ENTRY_AUTO(__uuidof(ProxyCopyHook), CProxyCopyHook)
+static std::array<WCHAR, MAX_PATH> g_quotedPathBuffer {};
+
+OBJECT_ENTRY_AUTO(__uuidof(CProxyCopyHook), CProxyCopyHook)
 
 CProxyCopyHook::CProxyCopyHook() {
     HKEY registryKey;
@@ -19,14 +20,15 @@ CProxyCopyHook::CProxyCopyHook() {
 
         regValueSize = static_cast<DWORD>(regValueData.size());
         if (RegGetValueW(registryKey, nullptr, REGISTRY_COPIER_PATH_VALUE_NAME, RRF_RT_REG_SZ, nullptr, regValueData.data(), &regValueSize) == ERROR_SUCCESS) {
-            // remove the '\0'
-            _copierCmdline.assign(regValueData.data(), regValueSize / sizeof(WCHAR) - 1);
+            _copierCmdline = QuotePath(regValueData.data());
         }
 
         regValueSize = static_cast<DWORD>(regValueData.size());
         if (RegGetValueW(registryKey, nullptr, REGISTRY_COPIER_ARGS_VALUE_NAME, RRF_RT_REG_SZ, nullptr, regValueData.data(), &regValueSize) == ERROR_SUCCESS) {
+            // remove the '\0'
             _copierCmdline.append(L" ").append(regValueData.data(), regValueSize / sizeof(WCHAR) - 1);
         }
+
         RegCloseKey(registryKey);
     }
 }
@@ -114,9 +116,9 @@ auto CProxyCopyHook::QuotePath(PCWSTR path) -> const WCHAR * {
         return path;
     }
 
-    wcscpy_s(_quotedPathBuffer.data(), _quotedPathBuffer.size(), path);
-    PathQuoteSpacesW(_quotedPathBuffer.data());
-    return _quotedPathBuffer.data();
+    wcscpy_s(g_quotedPathBuffer.data(), g_quotedPathBuffer.size(), path);
+    PathQuoteSpacesW(g_quotedPathBuffer.data());
+    return g_quotedPathBuffer.data();
 }
 
 auto CProxyCopyHook::WorkerProc() -> void {

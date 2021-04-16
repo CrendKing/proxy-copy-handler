@@ -1,16 +1,11 @@
 #pragma once
 
-#include "proxy_copy_handler_h.h"
 
-
-class ATL_NO_VTABLE CProxyCopyHook
+class ATL_NO_VTABLE __declspec(uuid("4EB17DC6-A98E-42DE-9F3F-93A6819B08A4")) CProxyCopyHook
     : public ATL::CComObjectRoot
-    , public ATL::CComCoClass<CProxyCopyHook, &CLSID_ProxyCopyHook>
+    , public ATL::CComCoClass<CProxyCopyHook, &__uuidof(CProxyCopyHook)>
     , public ICopyHookW {
 public:
-    CProxyCopyHook();
-    ~CProxyCopyHook();
-
     DECLARE_REGISTRY_RESOURCEID(IDS_PROXY_COPY_HOOK)
 
     DECLARE_PROTECT_FINAL_CONSTRUCT()
@@ -19,9 +14,13 @@ public:
         COM_INTERFACE_ENTRY(ICopyHookW)
     END_COM_MAP()
 
-    auto STDMETHODCALLTYPE CopyCallback(HWND hwnd, UINT wFunc, UINT wFlags, PCWSTR pszSrcFile, DWORD dwSrcAttribs, PCWSTR pszDestFile, DWORD dwDestAttribs) -> UINT override;
+protected:
+    CProxyCopyHook();
+    ~CProxyCopyHook();
 
 private:
+    auto STDMETHODCALLTYPE CopyCallback(HWND hwnd, UINT wFunc, UINT wFlags, PCWSTR pszSrcFile, DWORD dwSrcAttribs, PCWSTR pszDestFile, DWORD dwDestAttribs) -> UINT override;
+
     struct ExecutionKey {
         UINT operation;
         std::wstring destination;
@@ -41,8 +40,6 @@ private:
     static auto QuotePath(PCWSTR path) -> const WCHAR *;
 
     auto WorkerProc() -> void;
-
-    static std::array<WCHAR, MAX_PATH> _quotedPathBuffer;
 
     std::mutex _mutex;
     std::condition_variable _cv;

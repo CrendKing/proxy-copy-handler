@@ -1,10 +1,7 @@
 #include "pch.h"
-#include "proxy_copy_handler_h.h"
 
 
 class ProxyCopyHandlerModule : public ATL::CAtlDllModuleT<ProxyCopyHandlerModule> {
-public:
-    DECLARE_LIBID(LIBID_ProxyCopyHandlerLib)
 } g_module;
 
 extern "C" auto WINAPI DllMain(HINSTANCE hInstance, DWORD dwReason, LPVOID lpReserved) -> BOOL {
@@ -23,12 +20,12 @@ extern "C" auto STDAPICALLTYPE DllGetClassObject(_In_ REFCLSID rclsid, _In_ REFI
 
 _Use_decl_annotations_
 extern "C" auto STDAPICALLTYPE DllRegisterServer() -> HRESULT {
-    return g_module.DllRegisterServer();
+    return g_module.DllRegisterServer(FALSE);
 }
 
 _Use_decl_annotations_
 extern "C" auto STDAPICALLTYPE DllUnregisterServer() -> HRESULT {
-    return g_module.DllUnregisterServer();
+    return g_module.DllUnregisterServer(FALSE);
 }
 
 _Use_decl_annotations_

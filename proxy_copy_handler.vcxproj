@@ -24,21 +24,14 @@
     <ClCompile Include="src\pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="src\proxy_copy_handler_i.c">
-      <PrecompiledHeader />
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\hook.h" />
     <ClInclude Include="src\pch.h" />
-    <ClInclude Include="src\proxy_copy_handler_h.h" />
     <ClInclude Include="src\resource.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="src\proxy_copy_handler.rc" />
-  </ItemGroup>
-  <ItemGroup>
-    <Midl Include="src\$(ProjectName).idl" />
   </ItemGroup>
   <ItemGroup>
     <None Include="src\$(ProjectName).def" />
