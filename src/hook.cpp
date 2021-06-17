@@ -69,10 +69,9 @@ auto STDMETHODCALLTYPE CProxyCopyHook::CopyCallback(HWND hwnd, UINT wFunc, UINT 
     }
 
     {
-        const ExecutionKey execKey(wFunc, pszDestFile);
-
         const std::unique_lock lock(_mutex);
 
+        const ExecutionKey execKey(wFunc, pszDestFile);
         _pendingExecutions[execKey].emplace_back(pszSrcFile);
     }
 
@@ -179,6 +178,14 @@ auto CProxyCopyHook::WorkerProc() -> void {
         if (CreateProcessW(nullptr, cmdline.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
             CloseHandle(pi.hThread);
             CloseHandle(pi.hProcess);
+
+            if (key.operation == FO_DELETE) {
+                for (std::wstring &s : sources) {
+                    SHChangeNotify(SHCNE_DELETE, SHCNF_PATHW, s.c_str(), nullptr);
+                }
+            } else {
+                SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_PATHW, key.destination.c_str(), nullptr);
+            }
         }
     }
 }
