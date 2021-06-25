@@ -50,5 +50,5 @@ private:
     std::atomic<bool> _stopWorker = false;
 
     std::wstring _copierCmdline;
-    std::unordered_map<ExecutionKey, std::vector<std::wstring>, ExecutionKey::Hasher> _pendingExecutions;
+    std::unordered_map<ExecutionKey, std::unordered_set<std::wstring>, ExecutionKey::Hasher> _pendingExecutions;
 };

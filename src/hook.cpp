@@ -14,23 +14,28 @@ OBJECT_ENTRY_AUTO(__uuidof(CProxyCopyHook), CProxyCopyHook)
 CProxyCopyHook::CProxyCopyHook() {
     HKEY registryKey;
 
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, REGISTRY_KEY_NAME, 0, nullptr, 0, KEY_QUERY_VALUE, nullptr, &registryKey, nullptr) == ERROR_SUCCESS) {
-        std::array<WCHAR, 1024> regValueData;
-        DWORD regValueSize;
-
-        regValueSize = static_cast<DWORD>(regValueData.size());
-        if (RegGetValueW(registryKey, nullptr, REGISTRY_COPIER_PATH_VALUE_NAME, RRF_RT_REG_SZ, nullptr, regValueData.data(), &regValueSize) == ERROR_SUCCESS) {
-            _copierCmdline = QuotePath(regValueData.data());
-        }
-
-        regValueSize = static_cast<DWORD>(regValueData.size());
-        if (RegGetValueW(registryKey, nullptr, REGISTRY_COPIER_ARGS_VALUE_NAME, RRF_RT_REG_SZ, nullptr, regValueData.data(), &regValueSize) == ERROR_SUCCESS) {
-            // remove the '\0'
-            _copierCmdline.append(L" ").append(regValueData.data(), regValueSize / sizeof(WCHAR) - 1);
-        }
-
-        RegCloseKey(registryKey);
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, REGISTRY_KEY_NAME, 0, nullptr, 0, KEY_QUERY_VALUE, nullptr, &registryKey, nullptr) != ERROR_SUCCESS) {
+        return;
     }
+
+    std::array<WCHAR, 1024> regValueData;
+    DWORD regValueSize;
+
+    regValueSize = static_cast<DWORD>(regValueData.size());
+    if (RegGetValueW(registryKey, nullptr, REGISTRY_COPIER_PATH_VALUE_NAME, RRF_RT_REG_SZ, nullptr, regValueData.data(), &regValueSize) != ERROR_SUCCESS) {
+        return;
+    }
+
+    _copierCmdline = QuotePath(regValueData.data());
+
+    regValueSize = static_cast<DWORD>(regValueData.size());
+    if (RegGetValueW(registryKey, nullptr, REGISTRY_COPIER_ARGS_VALUE_NAME, RRF_RT_REG_SZ, nullptr, regValueData.data(), &regValueSize) != ERROR_SUCCESS) {
+        return;
+    }
+
+    _copierCmdline.append(L" ").append(regValueData.data(), regValueSize / sizeof(WCHAR) - 1);  /* remove the '\0' */
+
+    RegCloseKey(registryKey);
 }
 
 CProxyCopyHook::~CProxyCopyHook() {
@@ -72,7 +77,7 @@ auto STDMETHODCALLTYPE CProxyCopyHook::CopyCallback(HWND hwnd, UINT wFunc, UINT 
         const std::unique_lock lock(_mutex);
 
         const ExecutionKey execKey(wFunc, pszDestFile);
-        _pendingExecutions[execKey].emplace_back(pszSrcFile);
+        _pendingExecutions[execKey].emplace(pszSrcFile);
     }
 
     SetThreadpoolWait(_waitTp, _waitEvent, reinterpret_cast<FILETIME *>(&QUEUE_SOURCES_DELAY_100_NS));
@@ -137,9 +142,9 @@ auto CProxyCopyHook::WorkerProc() -> void {
         lock.unlock();
 
         std::wstring sourceArg;
-        for (std::wstring &s : sources) {
-            if (PathFileExists(s.c_str())) {
-                sourceArg.append(L" ").append(QuotePath(s.c_str()));
+        for (const std::wstring &s : sources) {
+            if (PathFileExistsW(s.c_str())) {
+                sourceArg = std::format(L"{} {}", sourceArg, QuotePath(s.c_str()));
             }
         }
 
@@ -162,16 +167,12 @@ auto CProxyCopyHook::WorkerProc() -> void {
             return;
         }
 
-        std::wstring cmdline = _copierCmdline;
-        cmdline.append(L" /cmd=")
-            .append(cmdlineOperation);
-
+        std::wstring destinationArg;
         if (!key.destination.empty()) {
-            cmdline.append(L" /to=")
-                .append(key.destination);
+            destinationArg = std::format(L" /to={}", key.destination);
         }
 
-        cmdline.append(sourceArg);
+        std::wstring cmdline = std::format(L"{} /cmd={}{} {}", _copierCmdline, cmdlineOperation, destinationArg, sourceArg);
 
         STARTUPINFOW si = { .cb = sizeof(si) };
         PROCESS_INFORMATION pi;
@@ -180,7 +181,7 @@ auto CProxyCopyHook::WorkerProc() -> void {
             CloseHandle(pi.hProcess);
 
             if (key.operation == FO_DELETE) {
-                for (std::wstring &s : sources) {
+                for (const std::wstring &s : sources) {
                     SHChangeNotify(SHCNE_DELETE, SHCNF_PATHW, s.c_str(), nullptr);
                 }
             } else {

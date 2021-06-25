@@ -9,6 +9,7 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
