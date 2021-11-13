@@ -1,4 +1,3 @@
-#include "pch.h"
 #include "hook.h"
 
 
@@ -99,15 +98,12 @@ CProxyCopyHook::ExecutionKey::ExecutionKey(UINT func, PCWSTR dest)
 }
 
 auto CProxyCopyHook::ExecutionKey::Hasher::operator()(const ExecutionKey &key) const -> size_t {
-    const size_t h1 = std::hash<UINT> {} (key.operation);
-    const size_t h2 = std::hash<std::wstring> {} (key.destination);
+    const size_t h1 = std::hash<UINT> {}(key.operation);
+    const size_t h2 = std::hash<std::wstring> {}(key.destination);
     return h1 ^ (h2 << 1);
 }
 
-auto CALLBACK CProxyCopyHook::WaitCallback(PTP_CALLBACK_INSTANCE Instance,
-                                           PVOID                 Context,
-                                           PTP_WAIT              Wait,
-                                           TP_WAIT_RESULT        WaitResult) -> void {
+auto CALLBACK CProxyCopyHook::WaitCallback(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PTP_WAIT Wait, TP_WAIT_RESULT WaitResult) -> void {
     if (CProxyCopyHook *hook = static_cast<CProxyCopyHook *>(Context); hook->_workerThread.joinable()) {
         hook->_cv.notify_one();
     } else {
@@ -174,7 +170,7 @@ auto CProxyCopyHook::WorkerProc() -> void {
 
         std::wstring cmdline = std::format(L"{} /cmd={}{} {}", _copierCmdline, cmdlineOperation, destinationArg, sourceArg);
 
-        STARTUPINFOW si = { .cb = sizeof(si) };
+        STARTUPINFOW si { .cb = sizeof(si) };
         PROCESS_INFORMATION pi;
         if (CreateProcessW(nullptr, cmdline.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
             CloseHandle(pi.hThread);

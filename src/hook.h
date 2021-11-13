@@ -33,10 +33,7 @@ private:
         };
     };
 
-    static auto CALLBACK WaitCallback(PTP_CALLBACK_INSTANCE Instance,
-                                      PVOID                 Context,
-                                      PTP_WAIT              Wait,
-                                      TP_WAIT_RESULT        WaitResult) -> void;
+    static auto CALLBACK WaitCallback(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PTP_WAIT Wait, TP_WAIT_RESULT WaitResult) -> void;
     static auto QuotePath(PCWSTR path) -> const WCHAR *;
 
     auto WorkerProc() -> void;
