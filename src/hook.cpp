@@ -45,6 +45,7 @@ CProxyCopyHook::~CProxyCopyHook() {
     }
 
     if (_waitTp != nullptr) {
+        WaitForThreadpoolWaitCallbacks(_waitTp, FALSE);
         CloseThreadpoolWait(_waitTp);
     }
 
@@ -79,6 +80,14 @@ auto STDMETHODCALLTYPE CProxyCopyHook::CopyCallback(HWND hwnd, UINT wFunc, UINT 
         _pendingExecutions[execKey].emplace(pszSrcFile);
     }
 
+    /*
+    When multiple copy operations happen in quick succession (within the below DELAY constant), we want to merge them
+    into one bigger operation and trigger the copier just once.
+
+    Because SetThreadpoolWait() "can wait for only one handle", subsequent calls to it would cancel the previous registered wait.
+
+    Since we never want to trigger the callback early, the event is never set.
+    */
     SetThreadpoolWait(_waitTp, _waitEvent, reinterpret_cast<FILETIME *>(&QUEUE_SOURCES_DELAY_100_NS));
 
     return IDNO;
@@ -103,8 +112,8 @@ auto CProxyCopyHook::ExecutionKey::Hasher::operator()(const ExecutionKey &key) c
     return h1 ^ (h2 << 1);
 }
 
-auto CALLBACK CProxyCopyHook::WaitCallback(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PTP_WAIT Wait, TP_WAIT_RESULT WaitResult) -> void {
-    if (CProxyCopyHook *hook = static_cast<CProxyCopyHook *>(Context); hook->_workerThread.joinable()) {
+auto CALLBACK CProxyCopyHook::WaitCallback(PTP_CALLBACK_INSTANCE instance, PVOID context, PTP_WAIT wait, TP_WAIT_RESULT waitResult) -> void {
+    if (CProxyCopyHook *hook = static_cast<CProxyCopyHook *>(context); hook->_workerThread.joinable()) {
         hook->_cv.notify_one();
     } else {
         hook->_workerThread = std::thread(&CProxyCopyHook::WorkerProc, hook);
