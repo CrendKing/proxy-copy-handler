@@ -47,5 +47,6 @@ private:
     std::atomic<bool> _stopWorker = false;
 
     std::wstring _copierCmdline;
+    bool _startMinimized = false;
     std::unordered_map<ExecutionKey, std::unordered_set<std::wstring>, ExecutionKey::Hasher> _pendingExecutions;
 };

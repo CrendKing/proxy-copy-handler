@@ -2,8 +2,9 @@
 
 
 static constexpr const WCHAR *REGISTRY_KEY_NAME = LR"(Software\ProxyCopyHandler)";
-static constexpr const WCHAR *REGISTRY_COPIER_PATH_VALUE_NAME = L"CopierPath";
-static constexpr const WCHAR *REGISTRY_COPIER_ARGS_VALUE_NAME = L"CopierArgs";
+static constexpr const WCHAR *REGISTRY_VALUE_NAME_COPIER_PATH = L"CopierPath";
+static constexpr const WCHAR *REGISTRY_VALUE_NAME_COPIER_ARGS = L"CopierArgs";
+static constexpr const WCHAR *REGISTRY_VALUE_NAME_START_MIN = L"StartMinimized";
 static int64_t QUEUE_SOURCES_DELAY_100_NS = -1000000;
 
 static std::array<WCHAR, MAX_PATH> g_quotedPathBuffer {};
@@ -17,22 +18,28 @@ CProxyCopyHook::CProxyCopyHook() {
         return;
     }
 
-    std::array<WCHAR, 1024> regValueData;
+    std::array<WCHAR, 1024> strValueData;
+    DWORD dwordValueData;
     DWORD regValueSize;
 
-    regValueSize = static_cast<DWORD>(regValueData.size());
-    if (RegGetValueW(registryKey, nullptr, REGISTRY_COPIER_PATH_VALUE_NAME, RRF_RT_REG_SZ, nullptr, regValueData.data(), &regValueSize) != ERROR_SUCCESS) {
+    regValueSize = static_cast<DWORD>(strValueData.size());
+    if (RegGetValueW(registryKey, nullptr, REGISTRY_VALUE_NAME_COPIER_PATH, RRF_RT_REG_SZ, nullptr, strValueData.data(), &regValueSize) != ERROR_SUCCESS) {
         return;
     }
 
-    _copierCmdline = QuotePath(regValueData.data());
+    _copierCmdline = QuotePath(strValueData.data());
 
-    regValueSize = static_cast<DWORD>(regValueData.size());
-    if (RegGetValueW(registryKey, nullptr, REGISTRY_COPIER_ARGS_VALUE_NAME, RRF_RT_REG_SZ, nullptr, regValueData.data(), &regValueSize) != ERROR_SUCCESS) {
+    regValueSize = static_cast<DWORD>(strValueData.size());
+    if (RegGetValueW(registryKey, nullptr, REGISTRY_VALUE_NAME_COPIER_ARGS, RRF_RT_REG_SZ, nullptr, strValueData.data(), &regValueSize) != ERROR_SUCCESS) {
         return;
     }
 
-    _copierCmdline.append(L" ").append(regValueData.data(), regValueSize / sizeof(WCHAR) - 1);  /* remove the '\0' */
+    _copierCmdline.append(L" ").append(strValueData.data(), regValueSize / sizeof(WCHAR) - 1);  /* remove the '\0' */
+
+    regValueSize = sizeof(dwordValueData);
+    if (RegGetValueW(registryKey, nullptr, REGISTRY_VALUE_NAME_START_MIN, RRF_RT_REG_DWORD, nullptr, &dwordValueData, &regValueSize) == ERROR_SUCCESS) {
+        _startMinimized = (dwordValueData != 0);
+    }
 
     RegCloseKey(registryKey);
 }
@@ -181,6 +188,12 @@ auto CProxyCopyHook::WorkerProc() -> void {
 
         STARTUPINFOW si { .cb = sizeof(si) };
         PROCESS_INFORMATION pi;
+
+        if (_startMinimized) {
+            si.dwFlags = STARTF_USESHOWWINDOW;
+            si.wShowWindow = SW_SHOWMINNOACTIVE;
+        }
+
         if (CreateProcessW(nullptr, cmdline.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
             CloseHandle(pi.hThread);
             CloseHandle(pi.hProcess);
